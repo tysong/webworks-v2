@@ -203,12 +203,12 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
     except OSError, e:  ## if failed, report it back to the user ##
         print ("Error: %s - %s." % (e.filename,e.strerror))
 
-    print "Starting tracerouting ..."
+    #print "Starting tracerouting ..."
 
-    try:
-    	routes=py_traceroute(str(url).split("/")[0])
-    except Exception:
-    	print ("tracerouting unsuccessful")
+    #try:
+    #	routes=py_traceroute(str(url).split("/")[0])
+    #except Exception:
+    #	print ("tracerouting unsuccessful")
     
     print "Starting ping ..."
 

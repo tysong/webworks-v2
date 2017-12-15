@@ -193,10 +193,10 @@ def browse_url(har_directory,url,domains,getter,getter_version,no_cache,count):
 		print "har/"+filename+".har doesn't exist"
 
 
-	try:
-		har_stats["route"]=routes
-	except Exception:
-		print "traceroute info is not available"
+	#try:
+	#	har_stats["route"]=routes
+	#except Exception:
+	#	print "traceroute info is not available"
 
 	try:
 		har_stats["ping_max"]=ping_max
