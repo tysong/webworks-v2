@@ -37,7 +37,6 @@ import random
 import netifaces as ni
 from subprocess import check_output, CalledProcessError
 from multiprocessing import Process, Manager
-import browse
 
 urlfile =''
 iterations =0 
@@ -57,7 +56,7 @@ current_directory =''
 har_directory =''
 
 # Configuration
-DEBUG = True
+DEBUG = False
 CONFIGFILE = '/monroe/config'
 
 # Default values (overwritable from the scheduler)
@@ -90,10 +89,13 @@ EXPCONFIG = {
 # 		  ['ebay.com/', 'ebay.com/rpp/electronics-en', 'ebay.com/rpp/electronics-en-cameras', 'ebay.com/rpp/sporting-goods-en', 'ebay.com/sch/Cycling-/7294/i.html', 'ebay.com/globaldeals', 'ebay.com/sch/Cell-Phones-Smartphones-/9355/i.html', 'ebay.com/globaldeals/tech/laptops-netbooks', 'ebay.com/rpp/home-and-garden-en', 'ebay.com/sch/Furniture-/3197/i.html'],
 # 		    ['nytimes.com','nytimes.com/section/science?action=click&pgtype=Homepage&region=TopBar&module=HPMiniNav&contentCollection=Science&WT.nav=page','nytimes.com/section/science/earth?action=click&contentCollection=science&region=navbar&module=collectionsnav&pagetype=sectionfront&pgtype=sectionfront','nytimes.com/section/science/space?action=click&contentCollection=science&region=navbar&module=collectionsnav&pagetype=sectionfront&pgtype=sectionfront', 'nytimes.com/section/health?action=click&contentCollection=science&module=collectionsnav&pagetype=sectionfront&pgtype=sectionfront&region=navbar', 'nytimes.com/section/sports?WT.nav=page&action=click&contentCollection=Sports&module=HPMiniNav&pgtype=Homepage&region=TopBar', 'nytimes.com/section/fashion?WT.nav=page&action=click&contentCollection=Style&module=HPMiniNav&pgtype=Homepage&region=TopBar','nytimes.com/pages/dining/index.html?action=click&pgtype=Homepage&region=TopBar&module=HPMiniNav&contentCollection=Food&WT.nav=page', 'cooking.nytimes.com/recipes/1013616-quinoa-and-chard-cakes?action=click&module=RecirculationRibbon&pgType=recipedetails&rank=3', 'nytimes.com/2017/04/10/upshot/how-many-pills-are-too-many.html?rref=collection%2Fsectioncollection%2Fhealth&action=click&contentCollection=health&region=stream&module=stream_unit&version=latest&contentPlacement=6&pgtype=sectionfront&_r=0'],
 # 		['theguardian.com/international','theguardian.com/sport/2017/apr/12/new-gender-neutral-cricket-laws-officially-released-by-mcc','theguardian.com/uk/lifeandstyle','theguardian.com/lifeandstyle/2017/apr/11/vision-thing-how-babies-colour-in-the-world','theguardian.com/us-news/2017/apr/12/charging-bull-new-york-fearless-girl-statue-copyright-claim','theguardian.com/business/live/2017/apr/12/brexit-blow-to-workers-as-real-pay-starts-to-fall-again-business-live','theguardian.com/football','theguardian.com/football/2017/apr/11/juventus-barcelona-champions-league-quarter-final-match-report','theguardian.com/football/2017/apr/11/barcelona-neymar-clasico-ban','theguardian.com/uk/technology']],
-	"urls": [['httpvshttps.com']],
-        "http_protocols":["h1s","h2"],
+	"urls":[['httpvshttps.com']],
+        "http_protocols":["h1","h1s"],
         "iterations": 1,
-        "allowed_interfaces": ["op0","op1","op2","eth0"],  # Interfaces to run the experiment on
+        "allowed_interfaces": ["op0",
+                               "op1",
+                               "op2",
+							   "eth0"],  # Interfaces to run the experiment on
         "interfaces_without_metadata": ["eth0"]  # Manual metadata on these IF
         }
 
@@ -177,14 +179,12 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
     except OSError, e:  ## if failed, report it back to the user ##
         print ("Error: %s - %s." % (e.filename,e.strerror))
 
-    #print "Starting tracerouting ..."
+    print "Starting ping ..."
 
     #try:
     #	routes=py_traceroute(str(url).split("/")[0])
     #except Exception:
     #	print ("tracerouting unsuccessful")
-    
-    print "Starting ping ..."
 
     try:
     	response = subprocess.check_output(
@@ -201,8 +201,204 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
     	response = None
 	print "Ping info is unknown"
 
-    filename="";
-    har_stats,filename=browse.browse_url(har_directory,url,domains,getter,getter_version,no_cache,count)
+
+    print "Starting the display ..."
+    #count=run+1
+    st=time.time()
+    display = Display(visible=0, size=(800, 600))
+    display.start()
+    print "Display started in {} seconds.".format(time.time()-st)
+
+    d = DesiredCapabilities.FIREFOX
+    #d['loggingPrefs'] = {'browser': 'ALL', 'client': 'ALL', 'driver': 'ALL', 'performance': 'ALL', 'server': 'ALL'}
+    
+    d['marionette'] = True
+    d['binary'] = '/usr/bin/firefox'
+    print "Creating Firefox profile .."
+    try:
+    	profile = webdriver.FirefoxProfile("/opt/monroe/")
+    except Exception as e:
+	raise WebDriverException("Unable to set FF profile in  webdriver.", e)
+        return
+
+    print "Setting different Firefox profile .."
+    #set firefox preferences
+
+    profile.accept_untrusted_certs = True
+    profile.add_extension("har.xpi")
+    
+    if no_cache==1:
+    	profile.set_preference('browser.cache.memory.enable', False)
+    	profile.set_preference('browser.cache.offline.enable', False)
+    	profile.set_preference('browser.cache.disk.enable', False)
+    	profile.set_preference('network.http.use-cache', False)
+    else:
+    	profile.set_preference('browser.cache.memory.enable', True)
+    	profile.set_preference('browser.cache.offline.enable', True)
+    	profile.set_preference('browser.cache.disk.enable', True)
+    	profile.set_preference('network.http.use-cache', True)
+
+    profile.set_preference("app.update.enabled", False)
+    profile.set_preference('browser.startup.page', 0)
+    profile.set_preference("general.useragent.override", "Mozilla/5.0 (Android 4.4; Mobile; rv:46.0) Gecko/46.0 Firefox/46.0")
+    
+    #Check the HTTP(getter) scheme and disable the rest
+    if getter_version == 'HTTP1.1':
+        profile.set_preference('network.http.spdy.enabled.http2', False)
+        profile.set_preference('network.http.spdy.enabled', False)
+        profile.set_preference('network.http.spdy.enabled.v3-1', False)
+        profile.set_preference('network.http.max-connections-per-server', 6)
+        filename = "h1-"+url.split("/")[0]+"."+str(count)
+    elif getter_version == 'HTTP1.1/TLS':
+        profile.set_preference('network.http.spdy.enabled.http2', False)
+        profile.set_preference('network.http.spdy.enabled', False)
+        profile.set_preference('network.http.spdy.enabled.v3-1', False)
+        profile.set_preference('network.http.max-connections-per-server', 6)
+        filename = "h1s-"+url.split("/")[0]+"."+str(count)
+    elif getter_version == 'HTTP2':
+        profile.set_preference('network.http.spdy.enabled.http2', True)
+        profile.set_preference('network.http.spdy.enabled', True)
+        profile.set_preference('network.http.spdy.enabled.v3-1', True )
+        filename = "h2-"+url.split("/")[0]+"."+str(count)
+    
+    
+    #profile.set_preference('network.prefetch-next', False)
+    #profile.set_preference('network.http.spdy.enabled.v3-1', False)
+    
+    newurl = getter+url
+    
+    #set the preference for the trigger
+    profile.set_preference("extensions.netmonitor.har.contentAPIToken", "test")
+    profile.set_preference("extensions.netmonitor.har.autoConnect", True)
+    profile.set_preference(domains + "defaultFileName", filename)
+    profile.set_preference(domains + "enableAutoExportToFile", True)
+    profile.set_preference(domains + "defaultLogDir", har_directory)
+    profile.set_preference(domains + "pageLoadedTimeout", 1000)
+    profile.set_preference('webdriver.load.strategy', 'unstable')
+    time.sleep(1)
+
+    print "Profile for the Firefox is set"
+
+    #create firefox driver
+
+    print "Creating the Firefox driver .."
+
+    try:
+        st=time.time()
+        driver = webdriver.Firefox(capabilities=d,firefox_profile=profile)
+        print "Driver started in {} seconds.".format(time.time()-st)
+
+	driver.set_page_load_timeout(100)
+        #driver.manage.timeouts().pageLoadTimeout(100,SECONDS)
+        #driver.manage.timeouts().setScriptTimeout(100,SECONDS)
+        st=time.time()
+        driver.get(newurl)
+        print "Driver.get returned in {} seconds.".format(time.time()-st)
+	
+	navigationStart = driver.execute_script("return window.performance.timing.navigationStart")
+	responseStart = driver.execute_script("return window.performance.timing.responseStart")
+	domComplete = driver.execute_script("return window.performance.timing.domComplete")
+        loadeventStart= driver.execute_script("return window.performance.timing.loadEventStart")
+
+	backendPerformance = responseStart - navigationStart
+	frontendPerformance = domComplete - responseStart
+	plt = loadeventStart - navigationStart
+
+	print "Back End: %s" % backendPerformance
+	print "Front End: %s" % frontendPerformance
+	print "Page load time: %s" % plt
+	#timestr = time.strftime("%Y%m%d-%H%M%S")
+	#driver.save_screenshot(timestr+".png")
+    except Exception as e:
+        raise WebDriverException("Unable to start webdriver with FF.", e)
+        return
+    
+    time.sleep(5)
+    print "Quiting the driver.."
+    #driver.save_screenshot('screenie.png')
+
+    #close the firefox driver after HAR is written
+    driver.close()
+
+    print "Terminating the display .."
+
+    display.popen.terminate()
+
+    display.stop()
+
+    print "Killing geckodriver explicitely .."
+    try:
+	output=check_output("kill $(ps aux | pgrep -fla geckodriver| awk '{print $1}')",shell=True)
+    except CalledProcessError as e:
+	if e.returncode == 28:
+		print "Time limit exceeded"
+    har_stats={}
+    
+    objs=[]
+    pageSize=0
+
+    print "Processing the HAR files ..."
+
+    try:
+    	with open("har/"+filename+".har") as f:
+        	msg=json.load(f)
+    		num_of_objects=0
+
+    		start=0
+    		for entry in msg["log"]["entries"]:
+        		try:
+                		obj={}
+                		obj["url"]=entry["request"]["url"]
+               			obj["objectSize"]=entry["response"]["bodySize"]+entry["response"]["headersSize"]
+                		pageSize=pageSize+entry["response"]["bodySize"]+entry["response"]["headersSize"]
+				obj["mimeType"]=entry["response"]["content"]["mimeType"]
+				obj["startedDateTime"]=entry["startedDateTime"]
+                		obj["time"]=entry["time"]
+                		obj["timings"]=entry["timings"]
+                		objs.append(obj)
+                		num_of_objects=num_of_objects+1
+                		if start==0:
+                        		start_time=entry["startedDateTime"]
+                        		start=1
+                		end_time=entry["startedDateTime"]
+                		ms=entry["time"]
+    			except KeyError:
+        			pass
+                
+    		har_stats["Objects"]=objs
+    		har_stats["NumObjects"]=num_of_objects
+    		har_stats["PageSize"]=pageSize
+    except IOError:
+    	print "har/"+filename+".har doesn't exist"
+        
+
+    #try:
+    #   har_stats["tracedRoutes"]=routes.rstrip().split(" ")
+    #except Exception:
+    #   print "traceroute info is not available"
+
+    try:
+    	har_stats["ping_max"]=ping_max
+        har_stats["ping_avg"]=ping_avg
+	har_stats["ping_min"]=ping_min
+	har_stats["ping_exp"]=1
+    except Exception:
+	print("Ping info is not available")
+        har_stats["ping_exp"]=0
+    try:
+    	hours,minutes,seconds=str(((parse(end_time)+ datetime.timedelta(milliseconds=ms))- parse(start_time))).split(":")
+    	hours = int(hours)
+    	minutes = int(minutes)
+    	seconds = float(seconds)
+    	plt_ms = int(3600000 * hours + 60000 * minutes + 1000 * seconds)
+    	har_stats["Web load time2"]=plt_ms
+    except:
+    	print "Timing errors in web load time"
+
+    har_stats["url"]=url
+    har_stats["Protocol"]=getter_version	
+    har_stats["Web load time1"]=plt
+    har_stats["ttfb"]=backendPerformance
     har_stats["DataId"]= expconfig['dataid']
     har_stats["DataVersion"]= expconfig['dataversion']
     har_stats["NodeId"]= expconfig['nodeid']
@@ -215,14 +411,6 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
     	har_stats["Operator"]= meta_info["Operator"]
     except Exception:
     	print("Operator info is not available")
-    #try:
-    #	har_stats["IMSI"]=meta_info["IMSI"]
-    #except Exception:
-    #	print("IMSI info is not available")
-    #try:
-    #	har_stats["IMEI"]=meta_info["IMEI"]
-    #except Exception:
-    #	print("IMEI info is not available")
     try:
     	har_stats["InternalInterface"]=meta_info["InternalInterface"]
     except Exception:
@@ -231,10 +419,6 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
     	har_stats["IPAddress"]=meta_info["IPAddress"]
     except Exception:
     	print("IPAddress info is not available")
-    try:
-    	har_stats["InternalIPAddress"]=meta_info["InternalIPAddress"]
-    except Exception:
-    	print("InternalIPAddress info is not available")
     try:
     	har_stats["InterfaceName"]=meta_info["InterfaceName"]
     except Exception:
@@ -255,16 +439,17 @@ def run_exp(meta_info, expconfig, url,count,no_cache):
         json.dump(har_stats, outfile)
     
     if expconfig['verbosity'] > 2:
-            #print har_stats
-            print("Done with  Node: {}, HTTP protocol: {}, url: {}, Operator: {}".format(har_stats["NodeId"], har_stats["Protocol"],har_stats["url"],har_stats["Operator"]))
+            print har_stats
     if not DEBUG:
-	    #print har_stats
-            print("Done with  Node: {}, HTTP protocol: {}, url: {}, Operator: {}".format(har_stats["NodeId"], har_stats["Protocol"],har_stats["url"],har_stats["Operator"]))
+	    print har_stats
             monroe_exporter.save_output(har_stats, expconfig['resultdir'])
     try:
         os.remove("/opt/monroe/har/"+filename+".har")
     except OSError, e:  ## if failed, report it back to the user ##
         print ("Error: %s - %s." % (e.filename,e.strerror))
+
+    
+
     
     
 
@@ -318,7 +503,6 @@ def add_manual_metadata_information(info, ifname, expconfig):
     info[expconfig["modeminterfacename"]] = ifname
     info["Operator"] = "local"
     info["Timestamp"] = time.time()
-    info["ipaddress"] ="172.17.0.3"	
 
 
 def create_meta_process(ifname, expconfig):
@@ -348,7 +532,7 @@ if __name__ == '__main__':
         print 'HTTP Archive Directory Exists!'
     else:
         os.mkdir(har_directory)
-        print "HTTP Archive Directory created successfully in %s ..\n" % (har_directory)
+        print "HTTP Archive Directory created successfully in %s .." % (har_directory)
 
 
 
@@ -388,6 +572,8 @@ if __name__ == '__main__':
         raise e
 
     start_time = time.time()
+    
+    random.shuffle(urls)    
     for url_list in urls:
 	print "Randomizing the url lists .."
 
@@ -453,41 +639,41 @@ if __name__ == '__main__':
             # Ok we have some information lets start the experiment script
 
 
-	    #output_interface=None
+	    output_interface=None
 
-            #cmd1=["route",
-            #     "del",
-            #     "default"]
+            cmd1=["route",
+                 "del",
+                 "default"]
             #os.system(bashcommand)
-           # try:
-            #        check_output(cmd1)
-            #except CalledProcessError as e:
-             #       if e.returncode == 28:
-              #              print "Time limit exceeded"
+            try:
+                    check_output(cmd1)
+            except CalledProcessError as e:
+                    if e.returncode == 28:
+                            print "Time limit exceeded"
             
-           # gw_ip="undefined"
-           # for g in ni.gateways()[ni.AF_INET]:
-           #     if g[1] == ifname:
-            #        gw_ip = g[0]
-             #       break   
+            gw_ip="undefined"
+            for g in ni.gateways()[ni.AF_INET]:
+                if g[1] == ifname:
+                    gw_ip = g[0]
+                    break   
 
-           # cmd2=["route", "add", "default", "gw", gw_ip,str(ifname)]
-           # try:
-            #    check_output(cmd2)
-            #	cmd3=["ip", "route", "get", "8.8.8.8"]
-             #   output=check_output(cmd3)
-            #	output = output.strip(' \t\r\n\0')
-            #	output_interface=output.split(" ")[4]
-            #	if output_interface==str(ifname):
-             #       	print "Source interface is set to "+str(ifname)
-    	#	else:
-         #           	print "Source interface "+output_interface+"is different from "+str(ifname)
-    	#		continue
+            cmd2=["route", "add", "default", "gw", gw_ip,str(ifname)]
+            try:
+                check_output(cmd2)
+            	cmd3=["ip", "route", "get", "8.8.8.8"]
+                output=check_output(cmd3)
+            	output = output.strip(' \t\r\n\0')
+            	output_interface=output.split(" ")[4]
+            	if output_interface==str(ifname):
+                    	print "Source interface is set to "+str(ifname)
+    		else:
+                    	print "Source interface "+output_interface+"is different from "+str(ifname)
+    			continue
             
-    	 #   except CalledProcessError as e:
-          #           if e.returncode == 28:
-           #                 print "Time limit exceeded"
-    	#	     continue
+    	    except CalledProcessError as e:
+                     if e.returncode == 28:
+                            print "Time limit exceeded"
+    		     continue
     	   
 
             if EXPCONFIG['verbosity'] > 1:

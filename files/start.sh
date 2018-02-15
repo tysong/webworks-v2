@@ -12,7 +12,7 @@ date
 echo -n "Experiment starts using git version "
 cat VERSION
 
-python experiment.py
+python headless_browser_with_user_input.py
 
 tar -zcvf /monroe/results/results$RANDOM.tgz /tmp/*.json
 

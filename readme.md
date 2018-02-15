@@ -170,4 +170,3 @@ The experiment generates a single JSON file like the following
    "Iccid":"8939104160000392116"
 } 
 ```
-# webworks-v2
