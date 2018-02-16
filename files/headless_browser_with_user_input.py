@@ -580,7 +580,13 @@ if __name__ == '__main__':
 			first_run=0
 	    	else:
 			no_cache=0
-	        random.shuffle(http_protocols)
+		if type(http_protocols) is list: 
+	        	random.shuffle(http_protocols)
+		else:
+			protocol=http_protocols
+			http_protocols=[]
+			http_protocols.append(protocol)
+
     	    	for protocol in http_protocols:
     			if protocol == 'h1':
                 			getter = h1
